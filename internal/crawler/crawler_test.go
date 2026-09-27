@@ -153,17 +153,14 @@ func TestRun_SkipsErrorPages(t *testing.T) {
 	if root.Title != "Root" {
 		t.Fatalf("Title = %q", root.Title)
 	}
-	var foundOK bool
-	for _, child := range root.Links {
-		if child.Title == "OK" {
-			foundOK = true
-		}
-		if child.Resource == srv.URL+"/gone" && child.Title != "" {
-			t.Fatalf("unexpected title for %s: %#v", child.Resource, child)
-		}
+	if len(root.Links) != 1 {
+		t.Fatalf("root.Links = %#v", root.Links)
 	}
-	if !foundOK {
-		t.Fatalf("OK child not found in %#v", root.Links)
+	if root.Links[0].Title != "OK" {
+		t.Fatalf("child.Title = %q", root.Links[0].Title)
+	}
+	if root.Links[0].Resource != srv.URL+"/ok" {
+		t.Fatalf("child.Resource = %q", root.Links[0].Resource)
 	}
 }
 

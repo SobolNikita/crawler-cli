@@ -40,7 +40,7 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 	pages := make(map[string]*model.Page)
 	children := make(map[string][]string)
 
-	jobs := make(chan job, 1024)
+	jobs := make(chan job)
 	var wg sync.WaitGroup
 
 	enqueue := func(j job) bool {
@@ -53,13 +53,14 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 		mu.Unlock()
 
 		wg.Add(1)
-		select {
-		case <-ctx.Done():
-			wg.Done()
-			return false
-		case jobs <- j:
-			return true
-		}
+		go func() {
+			select {
+			case <-ctx.Done():
+				wg.Done()
+			case jobs <- j:
+			}
+		}()
+		return true
 	}
 
 	var workersDone sync.WaitGroup
@@ -87,14 +88,21 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 
 	var build func(string) model.Page
 	build = func(u string) model.Page {
-		links := make([]model.Page, 0)
-		for _, child := range children[u] {
-			links = append(links, build(child))
-		}
-
 		mu.Lock()
 		p := pages[u]
+		childURLs := append([]string(nil), children[u]...)
 		mu.Unlock()
+
+		links := make([]model.Page, 0)
+		for _, child := range childURLs {
+			mu.Lock()
+			_, ok := pages[child]
+			mu.Unlock()
+			if !ok {
+				continue
+			}
+			links = append(links, build(child))
+		}
 
 		if p == nil {
 			return model.Page{Resource: u, Links: links}

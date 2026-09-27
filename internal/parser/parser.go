@@ -31,9 +31,7 @@ func ParseHTML(body []byte) (ParseResult, error) {
 			name, hasAttr := z.TagName()
 
 			if string(name) == "title" {
-				if z.Next() == html.TextToken {
-					result.Title = strings.TrimSpace(string(z.Text()))
-				}
+				result.Title = readTitle(z)
 				continue
 			}
 
@@ -50,6 +48,24 @@ func ParseHTML(body []byte) (ParseResult, error) {
 						break
 					}
 				}
+			}
+		}
+	}
+}
+
+func readTitle(z *html.Tokenizer) string {
+	var b strings.Builder
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			return strings.TrimSpace(b.String())
+		case html.TextToken:
+			b.Write(z.Text())
+		case html.EndTagToken:
+			name, _ := z.TagName()
+			if string(name) == "title" {
+				return strings.TrimSpace(b.String())
 			}
 		}
 	}
