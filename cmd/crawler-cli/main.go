@@ -42,14 +42,15 @@ func run() error {
 	f := fetcher.New(cfg.RequestTimeout)
 	c := crawler.New(cfg.Depth, f, log)
 
-	pages, err := c.Run(ctx, cfg.URLs)
-	if err != nil {
-		return err
-	}
+	pages, runErr := c.Run(ctx, cfg.URLs)
 
 	data, err := json.MarshalIndent(pages, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(cfg.Output, data, 0o644)
+	if err := os.WriteFile(cfg.Output, data, 0o644); err != nil {
+		return err
+	}
+	
+	return runErr
 }

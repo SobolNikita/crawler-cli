@@ -41,7 +41,41 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 	children := make(map[string][]string)
 
 	jobs := make(chan job)
+
+	pending := make(chan job)
 	var wg sync.WaitGroup
+
+	go func() {
+		var queue []job
+		defer func() {
+			for range queue {
+				wg.Done()
+			}
+			close(jobs)
+		}()
+
+		for {
+			var current job
+			var jobsCh chan job
+			if len(queue) > 0 {
+				current = queue[0]
+				jobsCh = jobs
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case j, ok := <-pending:
+				if !ok {
+					return
+				}
+				queue = append(queue, j)
+			case jobsCh <- current:
+				queue[0] = job{}
+				queue = queue[1:]
+			}
+		}
+	}()
 
 	enqueue := func(j job) bool {
 		mu.Lock()
@@ -53,14 +87,13 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 		mu.Unlock()
 
 		wg.Add(1)
-		go func() {
-			select {
-			case <-ctx.Done():
-				wg.Done()
-			case jobs <- j:
-			}
-		}()
-		return true
+		select {
+		case <-ctx.Done():
+			wg.Done()
+			return false
+		case pending <- j:
+			return true
+		}
 	}
 
 	var workersDone sync.WaitGroup
@@ -81,7 +114,7 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 
 	go func() {
 		wg.Wait()
-		close(jobs)
+		close(pending)
 	}()
 
 	workersDone.Wait()
@@ -114,7 +147,7 @@ func (c *Crawler) Run(ctx context.Context, startURLs []string) ([]model.Page, er
 	for _, u := range startURLs {
 		result = append(result, build(u))
 	}
-	return result, nil
+	return result, ctx.Err()
 }
 
 func (c *Crawler) process(
